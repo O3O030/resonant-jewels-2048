@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GEMSTONE_TIERS, getGemstone, GemstoneInfo } from '../data/gemstonesData';
 import { GemstoneGraphic } from './GemstoneGraphic';
 import { crystalAudio } from '../utils/crystalAudio';
-import { AgentAvatar } from './AgentAvatar';
 import confetti from 'canvas-confetti';
 import {
   Sparkles,
@@ -18,9 +17,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Flame,
-  Clock,
-  Zap,
-  Info,
   ChevronRight,
   Crown,
   Shield,
@@ -68,7 +64,6 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
   // Modals & Drawers
   const [showCodex, setShowCodex] = useState<boolean>(false);
   const [selectedCodexGem, setSelectedCodexGem] = useState<GemstoneInfo | null>(null);
-  const [showTeamNotes, setShowTeamNotes] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
   const handleCopyGameLink = () => {
@@ -83,32 +78,8 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
     }
   };
 
-  // Mission Timer simulation
-  const [missionTimeElapsed, setMissionTimeElapsed] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('gem_2048_mission_elapsed');
-      return saved ? parseInt(saved, 10) : 1580;
-    } catch {
-      return 1580;
-    }
-  });
-
   const boardRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-
-  // Timer increment
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setMissionTimeElapsed((prev) => {
-        const next = prev < 3600 ? prev + 1 : 3600;
-        try {
-          localStorage.setItem('gem_2048_mission_elapsed', next.toString());
-        } catch {}
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Update best score
   useEffect(() => {
@@ -412,17 +383,19 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
     const dy = touch.clientY - touchStartRef.current.y;
     const minSwipeDistance = 25;
 
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > minSwipeDistance) {
-      if (dx > 0) handleMove('right');
-      else handleMove('left');
-    } else if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > minSwipeDistance) {
-      if (dy > 0) handleMove('down');
-      else handleMove('up');
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < minSwipeDistance) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      handleMove(dx > 0 ? 'right' : 'left');
+    } else {
+      handleMove(dy > 0 ? 'down' : 'up');
     }
     touchStartRef.current = null;
   };
 
-  // Undo Move
   const handleUndo = () => {
     if (!history) return;
     setBoard(history.board);
@@ -440,12 +413,6 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
     if (!nextMuted) {
       crystalAudio.playGemMergeSound(64, 1);
     }
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -477,20 +444,8 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
           </p>
         </div>
 
-        {/* Action Controls & Mission Badge */}
+        {/* Action Controls */}
         <div className="relative z-10 flex flex-wrap items-center gap-2 self-start sm:self-center">
-          {/* Mission Timer Badge */}
-          <div
-            className="flex items-center gap-2 px-3 py-1.5 bg-[#14151d] border border-stone-700/60 rounded-xl text-xs"
-            title="敏捷協作研發進度"
-          >
-            <Clock className="w-3.5 h-3.5 text-amber-400/80 animate-spin" style={{ animationDuration: '10s' }} />
-            <div className="flex flex-col text-[10px] leading-tight">
-              <span className="text-stone-400 font-serif-tc">協作研發計時</span>
-              <span className="font-cinzel font-bold text-amber-200">{formatTime(missionTimeElapsed)} / 60:00</span>
-            </div>
-          </div>
-
           {/* Sound Toggle */}
           <button
             onClick={toggleSound}
@@ -530,16 +485,6 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
             <span>{copiedLink ? '已複製網址' : '分享連結'}</span>
           </button>
 
-          {/* Collaboration Notes Button */}
-          <button
-            onClick={() => setShowTeamNotes(!showTeamNotes)}
-            className="flex items-center gap-1 px-2.5 py-2 bg-[#15161e] hover:bg-stone-800 border border-stone-700/60 text-stone-400 hover:text-stone-200 rounded-xl text-xs transition-colors cursor-pointer"
-            title="查看團隊分工紀錄"
-          >
-            <Info className="w-3.5 h-3.5 text-stone-400" />
-            <span className="hidden md:inline font-serif-tc">協作筆記</span>
-          </button>
-
           {onClose && (
             <button
               onClick={onClose}
@@ -551,40 +496,7 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
         </div>
       </div>
 
-      {/* 2. Team Collaboration Notes Bar (Collapsible) */}
-      {showTeamNotes && (
-        <div className="bg-[#12131b] border border-amber-900/40 p-3.5 rounded-xl text-xs text-stone-300 flex flex-col md:flex-row md:items-center justify-between gap-3 animate-fadeIn">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="font-bold text-amber-300 flex items-center gap-1 font-serif-tc">
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              敏捷協作矩陣：
-            </span>
-            <div className="flex items-center gap-1.5">
-              <AgentAvatar agentId="creme_brulee" size="xs" />
-              <span className="font-medium text-amber-100">烤布蕾：</span>
-              <span className="text-stone-400">4x4 滑動核心、2048 階梯演算與 Web Audio 水晶諧音泛音合成器</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <AgentAvatar agentId="caramel" size="xs" />
-              <span className="font-medium text-amber-100">焦糖：</span>
-              <span className="text-stone-400">無邊框 3D 切面寶石矢量光學、黑色絲絨首飾襯墊與典雅金箔光澤</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <AgentAvatar agentId="cheese" size="xs" />
-              <span className="font-medium text-amber-100">起司：</span>
-              <span className="text-stone-400">12 階礦物學莫氏硬度、古典義典字體排版與圖鑑考證文獻</span>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowTeamNotes(false)}
-            className="text-[11px] text-stone-400 hover:text-amber-200 underline self-end md:self-auto cursor-pointer"
-          >
-            收合
-          </button>
-        </div>
-      )}
-
-      {/* 3. Game Layout: Velvet Jewel Case & Control Sidebars */}
+      {/* 2. Game Layout: Velvet Jewel Case & Control Sidebars */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Column: Classical Scoreboards, Unlocked Tiers, and Action Controls (4 Cols) */}
         <div className="lg:col-span-4 flex flex-col gap-3.5 order-2 lg:order-1">
@@ -615,7 +527,7 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <Crown className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-bold text-amber-200 font-serif-tc">目標：合成 1024 日耀神石</span>
+                <span className="text-xs font-bold text-amber-200 font-serif-tc">目標：合成 2048 創世寶鑽</span>
               </div>
               <span className="text-[10px] font-cinzel font-bold px-2 py-0.5 rounded-full bg-amber-950/60 text-amber-300 border border-amber-500/30">
                 階級：{highestGemReached}
@@ -677,83 +589,70 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
               <Smartphone className="w-3 h-3 text-amber-400" />
               <span>手機觸控滑動 / 鍵盤 WASD / 點擊方向盤</span>
             </div>
-
-            {/* On-screen Directional Buttons for Mobile/Click */}
-            <div className="flex flex-col items-center gap-1.5 pt-1">
-              <button
-                onClick={() => handleMove('up')}
-                className="w-11 h-9 bg-[#171822] hover:bg-amber-950/40 active:bg-amber-900/60 border border-stone-700 hover:border-amber-500/40 rounded-lg flex items-center justify-center shadow-md cursor-pointer text-stone-300 hover:text-amber-200 transition-colors"
-                title="向上滑動 (W / ↑)"
-              >
-                <ArrowUp className="w-4 h-4" />
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleMove('left')}
-                  className="w-11 h-9 bg-[#171822] hover:bg-amber-950/40 active:bg-amber-900/60 border border-stone-700 hover:border-amber-500/40 rounded-lg flex items-center justify-center shadow-md cursor-pointer text-stone-300 hover:text-amber-200 transition-colors"
-                  title="向左滑動 (A / ←)"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleMove('down')}
-                  className="w-11 h-9 bg-[#171822] hover:bg-amber-950/40 active:bg-amber-900/60 border border-stone-700 hover:border-amber-500/40 rounded-lg flex items-center justify-center shadow-md cursor-pointer text-stone-300 hover:text-amber-200 transition-colors"
-                  title="向下滑動 (S / ↓)"
-                >
-                  <ArrowDown className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleMove('right')}
-                  className="w-11 h-9 bg-[#171822] hover:bg-amber-950/40 active:bg-amber-900/60 border border-stone-700 hover:border-amber-500/40 rounded-lg flex items-center justify-center shadow-md cursor-pointer text-stone-300 hover:text-amber-200 transition-colors"
-                  title="向右滑動 (D / →)"
-                >
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
+            <div className="grid grid-cols-3 gap-1.5 max-w-[150px] mx-auto">
+              <div />
+              <button onClick={() => handleMove('up')} className="p-2 bg-[#171820] hover:bg-[#242633] border border-stone-700 rounded-lg text-stone-300 cursor-pointer transition-colors"><ArrowUp className="w-4 h-4 mx-auto" /></button>
+              <div />
+              <button onClick={() => handleMove('left')} className="p-2 bg-[#171820] hover:bg-[#242633] border border-stone-700 rounded-lg text-stone-300 cursor-pointer transition-colors"><ArrowLeft className="w-4 h-4 mx-auto" /></button>
+              <button onClick={() => handleMove('down')} className="p-2 bg-[#171820] hover:bg-[#242633] border border-stone-700 rounded-lg text-stone-300 cursor-pointer transition-colors"><ArrowDown className="w-4 h-4 mx-auto" /></button>
+              <button onClick={() => handleMove('right')} className="p-2 bg-[#171820] hover:bg-[#242633] border border-stone-700 rounded-lg text-stone-300 cursor-pointer transition-colors"><ArrowRight className="w-4 h-4 mx-auto" /></button>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Velvet Jewelry Display Box (8 Cols) */}
-        <div className="lg:col-span-8 flex flex-col items-center order-1 lg:order-2">
-          {/* Main Velvet Board Box Container with Gold Inlay Frame */}
+        {/* Right Column: Game Board */}
+        <div className="lg:col-span-8 order-1 lg:order-2 flex flex-col items-center">
           <div
             ref={boardRef}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
-            className="w-full max-w-[460px] aspect-square velvet-cushion-bg gold-inlay-frame p-3 sm:p-4.5 rounded-3xl relative grid grid-cols-4 grid-rows-4 gap-2.5 sm:gap-3.5 touch-none"
-            id="gemstone-board-grid"
+            className="relative w-full max-w-[460px] aspect-square bg-[#090a0f] rounded-3xl border-2 border-amber-900/50 p-3 sm:p-4 shadow-[0_20px_60px_rgba(0,0,0,0.55)] touch-none select-none"
           >
-            {/* 16 Plush Velvet Sunken Wells (首飾盒凹槽) */}
-            {board.map((row, rIdx) =>
-              row.map((cellVal, cIdx) => {
+            <div className="grid grid-cols-4 gap-2 sm:gap-3 w-full h-full">
+              {board.flatMap((row, r) => row.map((value, c) => {
+                const key = `${r}-${c}`;
+                const gem = value ? getGemstone(value) : null;
                 return (
-                  <div
-                    key={`slot-${rIdx}-${cIdx}`}
-                    className="w-full h-full rounded-2xl velvet-gem-well flex items-center justify-center relative overflow-hidden transition-all duration-150 group"
-                  >
-                    {cellVal ? (
-                      /* Pure Large 3D Faceted Gemstone (No square cards / no text in center) */
-                      <div className="w-full h-full flex items-center justify-center animate-scaleUp">
-                        <GemstoneGraphic value={cellVal} size="full" showNumberPill={true} />
-                      </div>
-                    ) : (
-                      /* Empty Velvet Indentation Cushion dot */
-                      <div className="w-2 h-2 rounded-full bg-stone-900/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)] opacity-40 group-hover:opacity-70 transition-opacity" />
-                    )}
+                  <div key={key} className="velvet-gem-well rounded-2xl flex items-center justify-center relative overflow-hidden">
+                    {gem && <GemstoneGraphic value={value!} size="lg" showNumberPill />}
                   </div>
                 );
-              })
+              }))}
+            </div>
+
+            {/* 2048 Victory Overlay - can continue playing */}
+            {hasWon2048 && (
+              <div className="absolute inset-0 bg-black/88 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center p-6 text-center text-white z-30 animate-fadeIn space-y-3 border-2 border-fuchsia-400/80 shadow-2xl">
+                <div className="w-20 h-20 flex items-center justify-center animate-bounce">
+                  <GemstoneGraphic value={2048} size="lg" showNumberPill={false} />
+                </div>
+                <span className="text-xs font-cinzel font-bold text-fuchsia-300 tracking-widest uppercase">★ CREATION JEWEL UNLOCKED ★</span>
+                <h3 className="text-2xl sm:text-3xl font-bold font-serif-tc text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-200 via-amber-200 to-cyan-200">
+                  恭喜！2048 創世寶鑽誕生！
+                </h3>
+                <p className="text-xs text-stone-200 max-w-xs leading-relaxed font-serif-tc">
+                  2048 是本作的重要里程碑，但旅程還沒有結束。您可以繼續挑戰更高階的寶石，包含 4096。
+                </p>
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    onClick={() => setHasWon2048(false)}
+                    className="px-5 py-2.5 bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-500 hover:brightness-110 text-white rounded-xl text-xs font-bold font-serif-tc shadow-xl transition-all cursor-pointer"
+                  >
+                    繼續挑戰 4096
+                  </button>
+                </div>
+              </div>
             )}
 
             {/* Game Over Overlay */}
-            {isGameOver && (
-              <div className="absolute inset-0 bg-black/90 backdrop-blur-xs rounded-3xl flex flex-col items-center justify-center p-6 text-center text-white z-30 animate-fadeIn space-y-3.5 border border-amber-900/40">
-                <span className="text-4xl filter drop-shadow-[0_0_12px_rgba(225,29,72,0.6)]">💎✦</span>
-                <h3 className="text-xl sm:text-2xl font-bold font-serif-tc text-amber-200">
-                  首飾展閣已滿 · 遊戲結束
-                </h3>
-                <p className="text-xs text-stone-300 max-w-xs font-serif-tc leading-relaxed">
+            {isGameOver && !hasWon2048 && (
+              <div className="absolute inset-0 bg-black/90 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center p-6 text-center text-white z-40 animate-fadeIn space-y-3">
+                <div className="w-16 h-16 flex items-center justify-center"><Flame className="w-12 h-12 text-rose-400" /></div>
+                <h3 className="text-2xl font-bold font-serif-tc text-amber-100">棋盤已封印</h3>
+                <p className="text-xs text-stone-300 max-w-xs leading-relaxed font-serif-tc">
+                  本局已無法再移動。您最高合成了 <span className="text-amber-300 font-bold">{getGemstone(highestGemReached).name}</span>。
+                </p>
+                <p className="text-xs text-stone-400 font-serif-tc">
                   本次最終得分：<span className="text-amber-300 font-bold font-cinzel text-sm">{score}</span>，合成了最高階級的
                   <span className="text-amber-200 font-bold"> {getGemstone(highestGemReached).name}</span>。
                 </p>
@@ -782,9 +681,7 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
                   <GemstoneGraphic value={1024} size="lg" showNumberPill={false} />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-xs font-cinzel font-bold text-amber-400 tracking-widest uppercase">
-                    ★ SOLAR CORONA MILESTONE ★
-                  </span>
+                  <span className="text-xs font-cinzel font-bold text-amber-400 tracking-widest uppercase">★ SOLAR CORONA MILESTONE ★</span>
                   <h3 className="text-xl sm:text-2xl font-bold font-serif-tc text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-300 to-yellow-100">
                     恭喜合成出【1024 日耀神石】！
                   </h3>
@@ -835,22 +732,13 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
             {/* Codex Header */}
             <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between bg-[#12131b]">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-amber-950/40 text-amber-300 border border-amber-500/30">
-                  <BookOpen className="w-5 h-5" />
-                </div>
+                <div className="p-2 rounded-xl bg-amber-950/40 text-amber-300 border border-amber-500/30"><BookOpen className="w-5 h-5" /></div>
                 <div>
                   <h3 className="text-base font-bold font-serif-tc text-amber-100">寶石礦物圖鑑與光學考證</h3>
-                  <p className="text-xs text-stone-400">
-                    起司考證莫氏硬度與礦物文獻 · 焦糖設計 3D 切面折射 · 烤布蕾實作水晶諧音
-                  </p>
+                  <p className="text-xs text-stone-400">寶石硬度、礦物文獻、3D 切面折射與水晶諧音的典藏圖鑑</p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowCodex(false)}
-                className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setShowCodex(false)} className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"><X className="w-5 h-5" /></button>
             </div>
 
             {/* Codex Grid Body */}
@@ -863,32 +751,21 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
                       key={gem.value}
                       onClick={() => setSelectedCodexGem(gem)}
                       className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
-                        isUnlocked
-                          ? 'bg-[#14151f] border-stone-800 hover:border-amber-500/50 hover:shadow-lg'
-                          : 'bg-[#0a0b10] border-stone-900 opacity-40'
+                        isUnlocked ? 'bg-[#14151f] border-stone-800 hover:border-amber-500/50 hover:shadow-lg' : 'bg-[#0a0b10] border-stone-900 opacity-40'
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        {/* Pure Large Gemstone Graphic */}
-                        <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center">
-                          <GemstoneGraphic value={gem.value} size="md" showNumberPill={false} />
-                        </div>
+                        <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center"><GemstoneGraphic value={gem.value} size="md" showNumberPill={false} /></div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-amber-100 truncate font-serif-tc">{gem.name}</span>
-                            <span className="text-[10px] font-cinzel font-bold text-amber-300 bg-black/60 px-1.5 py-0.5 rounded border border-amber-500/30">
-                              {gem.value}
-                            </span>
+                            <span className="text-[10px] font-cinzel font-bold text-amber-300 bg-black/60 px-1.5 py-0.5 rounded border border-amber-500/30">{gem.value}</span>
                           </div>
                           <p className="text-[10px] text-stone-400 font-cinzel truncate">{gem.enName}</p>
-                          <span className="inline-block text-[9.5px] text-amber-300/80 font-serif-tc mt-0.5">
-                            莫氏硬度: {gem.mohsHardness}
-                          </span>
+                          <span className="inline-block text-[9.5px] text-amber-300/80 font-serif-tc mt-0.5">莫氏硬度: {gem.mohsHardness}</span>
                         </div>
                       </div>
-                      <p className="text-[10.5px] text-stone-400 mt-2 line-clamp-2 leading-relaxed font-serif-tc">
-                        {gem.description}
-                      </p>
+                      <p className="text-[10.5px] text-stone-400 mt-2 line-clamp-2 leading-relaxed font-serif-tc">{gem.description}</p>
                     </div>
                   );
                 })}
@@ -899,29 +776,16 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
                 <div className="bg-[#151622] rounded-xl p-4 border border-amber-900/40 space-y-2.5 animate-fadeIn">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 flex items-center justify-center">
-                        <GemstoneGraphic value={selectedCodexGem.value} size="md" showNumberPill={false} />
-                      </div>
+                      <div className="w-12 h-12 flex items-center justify-center"><GemstoneGraphic value={selectedCodexGem.value} size="md" showNumberPill={false} /></div>
                       <div>
-                        <h4 className="text-sm font-bold text-amber-100 font-serif-tc">
-                          {selectedCodexGem.name} ({selectedCodexGem.enName})
-                        </h4>
-                        <span className="text-[11px] text-amber-300/80 font-serif-tc">
-                          類別：{selectedCodexGem.category} • 莫氏硬度：{selectedCodexGem.mohsHardness} • 色澤：{selectedCodexGem.toneDescription}
-                        </span>
+                        <h4 className="text-sm font-bold text-amber-100 font-serif-tc">{selectedCodexGem.name} ({selectedCodexGem.enName})</h4>
+                        <span className="text-[11px] text-amber-300/80 font-serif-tc">類別：{selectedCodexGem.category} • 莫氏硬度：{selectedCodexGem.mohsHardness} • 色澤：{selectedCodexGem.toneDescription}</span>
                       </div>
                     </div>
-                    <span className="text-sm font-bold font-cinzel text-amber-300 bg-black/60 px-3 py-1 rounded-lg border border-amber-500/30">
-                      TIER {selectedCodexGem.value}
-                    </span>
+                    <span className="text-sm font-bold font-cinzel text-amber-300 bg-black/60 px-3 py-1 rounded-lg border border-amber-500/30">TIER {selectedCodexGem.value}</span>
                   </div>
-                  <p className="text-xs text-stone-300 leading-relaxed font-serif-tc">
-                    {selectedCodexGem.description}
-                  </p>
-                  <div className="bg-[#0c0d14] p-3 rounded-lg border border-stone-800 text-[11px] text-stone-400 font-serif-tc">
-                    <span className="font-bold text-amber-300">起司文獻註解：</span>
-                    <span> {selectedCodexGem.lore}</span>
-                  </div>
+                  <p className="text-xs text-stone-300 leading-relaxed font-serif-tc">{selectedCodexGem.description}</p>
+                  <div className="bg-[#0c0d14] p-3 rounded-lg border border-stone-800 text-[11px] text-stone-400 font-serif-tc"><span className="font-bold text-amber-300">文獻註解：</span><span> {selectedCodexGem.lore}</span></div>
                 </div>
               )}
             </div>
@@ -929,12 +793,7 @@ const GemStone2048Game: React.FC<GemStone2048GameProps> = ({ onClose, isModal = 
             {/* Codex Footer */}
             <div className="px-5 py-3 border-t border-stone-800 bg-[#12131b] flex items-center justify-between text-xs">
               <span className="text-stone-400 font-serif-tc">點選任一寶石檢視光學與礦物文獻</span>
-              <button
-                onClick={() => setShowCodex(false)}
-                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold font-serif-tc rounded-xl transition-colors cursor-pointer"
-              >
-                關閉圖鑑
-              </button>
+              <button onClick={() => setShowCodex(false)} className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold font-serif-tc rounded-xl transition-colors cursor-pointer">關閉圖鑑</button>
             </div>
           </div>
         </div>
